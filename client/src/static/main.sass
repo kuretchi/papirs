@@ -7,15 +7,13 @@
     @include circle($size)
     background-color: white
     padding: 0
-    border:
-        color: black
-        style: solid
-        width: 2px
+    border: none
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2))
 
 @mixin vertical-list
     display: flex
     flex-direction: column
-    row-gap: 6px
+    row-gap: 8px
 
 html,
 body
@@ -37,18 +35,20 @@ body
 #controller
     @include vertical-list
     position: absolute
-    top: 16px
-    left: 16px
+    top: 18px
+    left: 18px
 
     img
         transition: filter 0.4s ease-out
-        padding: 6px
+        height: 100%
+        width: 100%
+        padding: 8px
 
     input[type="radio"]
         display: none
 
         & + label
-            @include button(38px)
+            @include button(40px)
 
         &:checked + label
             background-color: black
@@ -57,7 +57,7 @@ body
                 filter: invert(1)
 
     button
-        @include button(38px)
+        @include button(40px)
 
 #radio-pen:checked ~ #pen-colors
     visibility: visible
@@ -66,8 +66,8 @@ body
 #pen-colors
     @include vertical-list
     position: absolute
-    top: 46px
-    left: 46px
+    top: 50px
+    left: 50px
     transition: visibility 0.1s ease-out, opacity 0.1s ease-out
     visibility: hidden
     opacity: 0
@@ -76,7 +76,15 @@ body
         display: none
 
         & + label
-            @include button(20px)
+            @include button(22px)
+            transition: border-width 0.1s ease-out
+            border:
+                color: white
+                style: solid
+                width: 6px
+
+        &:checked + label
+            border-width: 0
 
     --black: rgb(0, 0, 0)
     --red: rgb(255, 75, 0)
@@ -87,6 +95,4 @@ body
 
     @each $color in "black", "red", "orange", "green", "blue", "sky-blue"
         #radio-#{$color} + label
-            border-color: var(--#{$color})
-        #radio-#{$color}:checked + label
             background-color: var(--#{$color})
