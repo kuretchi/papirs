@@ -10,6 +10,11 @@
     border: none
     filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2))
 
+@mixin img-fill
+    height: 100%
+    width: 100%
+    padding: 8px
+
 @mixin vertical-list
     display: flex
     flex-direction: column
@@ -39,16 +44,16 @@ body
     left: 18px
 
     img
-        transition: filter 0.4s ease-out
-        height: 100%
-        width: 100%
-        padding: 8px
+        @include img-fill
 
     input[type="radio"]
         display: none
 
         & + label
             @include button(40px)
+
+            img
+                transition: filter 0.4s ease-out
 
         &:checked + label
             background-color: black
@@ -96,3 +101,15 @@ body
     @each $color in "black", "red", "orange", "green", "blue", "sky-blue"
         #radio-#{$color} + label
             background-color: var(--#{$color})
+
+#info
+    @include vertical-list
+    position: absolute
+    bottom: 18px
+    left: 18px
+
+    img
+        @include img-fill
+
+    a
+        @include button(40px)
