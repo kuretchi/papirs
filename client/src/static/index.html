@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Papirs</title>
+        <link rel="stylesheet" href="https://unpkg.com/modern-css-reset/dist/reset.min.css">
+        <link rel="stylesheet" href="main.css">
+    </head>
+
+    <body>
+        <script type="module">
+            import init from './papirs_client.js';
+            init();
+        </script>
+
+        <div id="canvases">
+            <canvas id="canvas-main"></canvas>
+            <canvas id="canvas-sub"></canvas>
+        </div>
+
+        <div id="controller">
+            <input id="radio-selector" type="radio" name="tool">
+            <label for="radio-selector" title="Selector">
+                <img src="assets/selector.svg"/>
+            </label>
+
+            <input id="radio-pen" type="radio" name="tool">
+            <label for="radio-pen" title="Pen">
+                <img src="assets/pen.svg"/>
+            </label>
+
+            <div id="pen-colors">
+                <input id="radio-black" type="radio" name="pen-color">
+                <label for="radio-black" title="Black"></label>
+
+                <input id="radio-red" type="radio" name="pen-color">
+                <label for="radio-red" title="Red"></label>
+
+                <input id="radio-orange" type="radio" name="pen-color">
+                <label for="radio-orange" title="Orange"></label>
+
+                <input id="radio-green" type="radio" name="pen-color">
+                <label for="radio-green" title="Green"></label>
+
+                <input id="radio-blue" type="radio" name="pen-color">
+                <label for="radio-blue" title="Blue"></label>
+
+                <input id="radio-sky-blue" type="radio" name="pen-color">
+                <label for="radio-sky-blue" title="Sky blue"></label>
+            </div>
+
+            <input id="radio-eraser" type="radio" name="tool">
+            <label for="radio-eraser" title="Eraser">
+                <img src="assets/eraser.svg"/>
+            </label>
+
+            <button id="button-clear" title="Clear">
+                <img src="assets/clear.svg"/>
+            </button>
+        </div>
+    </body>
+</html>

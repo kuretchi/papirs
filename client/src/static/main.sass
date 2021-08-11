@@ -1,0 +1,92 @@
+@mixin circle($size)
+    border-radius: 50%
+    width: $size
+    height: $size
+
+@mixin button($size)
+    @include circle($size)
+    background-color: white
+    padding: 0
+    border:
+        color: black
+        style: solid
+        width: 2px
+
+@mixin vertical-list
+    display: flex
+    flex-direction: column
+    row-gap: 6px
+
+html,
+body
+    height: 100%
+    width: 100%
+    margin: 0
+    overflow: hidden
+
+body
+    background:
+        color: white
+        image: url('assets/cross.svg')
+        size: 20px
+
+#canvas-main,
+#canvas-sub
+    position: absolute
+
+#controller
+    @include vertical-list
+    position: absolute
+    top: 16px
+    left: 16px
+
+    img
+        transition: filter 0.4s ease-out
+        padding: 6px
+
+    input[type="radio"]
+        display: none
+
+        & + label
+            @include button(38px)
+
+        &:checked + label
+            background-color: black
+
+            img
+                filter: invert(1)
+
+    button
+        @include button(38px)
+
+#radio-pen:checked ~ #pen-colors
+    visibility: visible
+    opacity: 1
+
+#pen-colors
+    @include vertical-list
+    position: absolute
+    top: 46px
+    left: 46px
+    transition: visibility 0.1s ease-out, opacity 0.1s ease-out
+    visibility: hidden
+    opacity: 0
+
+    input[type="radio"]
+        display: none
+
+        & + label
+            @include button(20px)
+
+    --black: rgb(0, 0, 0)
+    --red: rgb(255, 75, 0)
+    --orange: rgb(246, 170, 0)
+    --green: rgb(3, 175, 122)
+    --blue: rgb(0, 90, 255)
+    --sky-blue: rgb(77, 196, 255)
+
+    @each $color in "black", "red", "orange", "green", "blue", "sky-blue"
+        #radio-#{$color} + label
+            border-color: var(--#{$color})
+        #radio-#{$color}:checked + label
+            background-color: var(--#{$color})
