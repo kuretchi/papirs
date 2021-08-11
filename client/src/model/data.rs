@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-
 use crate::{
     common::{Color, PathId, RenderablePath, Tool},
     web,
@@ -9,6 +7,7 @@ use geo::{prelude::*, Coordinate};
 use getset::CopyGetters;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 
 #[derive(Default, Debug, Serialize, Deserialize, CopyGetters)]
 struct DataInner {
