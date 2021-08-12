@@ -133,7 +133,7 @@ impl View {
 
         listen!(self.window, "resize", {
             let body = self.body;
-            move |_event: web_sys::UiEvent| {
+            move |_: web_sys::UiEvent| {
                 let width = body.client_width() as u32;
                 let height = body.client_height() as u32;
                 view.main_renderer.resize(width, height);

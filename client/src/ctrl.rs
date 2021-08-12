@@ -155,7 +155,10 @@ impl Handler for DrawHandler {
         let coord = coord - model.offset();
         let mut it = self.coords.iter().rev();
         let c_0 = coord;
-        let c_1 = it.next().copied().expect("`self.coords` should not empty");
+        let c_1 = it
+            .next()
+            .copied()
+            .expect("`self.coords` should not be empty");
         let c_2 = it.next().copied().unwrap_or(c_0);
         let mid_0_1 = (c_0 + c_1) / 2;
         let mid_1_2 = (c_1 + c_2) / 2;
