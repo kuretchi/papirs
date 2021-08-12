@@ -292,18 +292,9 @@ impl Controller {
         }
     }
 
-    pub fn on_pointer_up(&mut self, button: web::MouseButton) {
+    pub fn on_pointer_up(&mut self) {
         if let Some(h) = self.handler.take() {
-            let target_button = match h {
-                AnyHandler::Scroll(_) => web::MouseButton::Middle,
-                AnyHandler::Select(_)
-                | AnyHandler::Move(_)
-                | AnyHandler::Draw(_)
-                | AnyHandler::Erase(_) => web::MouseButton::Left,
-            };
-            if button == target_button {
-                h.finish(&mut self.model);
-            }
+            h.finish(&mut self.model);
         }
     }
 }

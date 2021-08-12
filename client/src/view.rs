@@ -218,14 +218,9 @@ impl View {
             }
         );
 
-        listen!(
-            self.canvases,
-            "pointerup",
-            move |event: web_sys::MouseEvent| {
-                let button = web::mouse_event_button(&event);
-                ctrl.borrow_mut().on_pointer_up(button);
-            }
-        );
+        listen!(self.canvases, "pointerup", move |_: web_sys::MouseEvent| {
+            ctrl.borrow_mut().on_pointer_up();
+        });
     }
 
     pub fn size(&self) -> Coordinate<i32> {
