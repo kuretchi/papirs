@@ -1,268 +1,58 @@
+//! A view, which renders objects and notifies the controller of recieved user events.
+
 use crate::{
-    common::{Color, RenderablePath, Tool},
+    common::{Color, OnScreen, RenderablePath, Tool},
     ctrl::Controller,
     web,
 };
+use enum_map::{enum_map, Enum, EnumMap};
 use geo::{Coordinate, Rect};
 use std::{cell::RefCell, rc::Rc};
-use wasm_bindgen::{prelude::*, JsCast as _};
+use wasm_bindgen::prelude::*;
 
-#[derive(Clone)]
-pub struct View {
-    window: web_sys::Window,
-    document: web_sys::Document,
-    body: web_sys::HtmlElement,
-
-    radio_selector: web_sys::HtmlInputElement,
-    radio_pen: web_sys::HtmlInputElement,
-    radio_eraser: web_sys::HtmlInputElement,
-    button_clear: web_sys::HtmlButtonElement,
-
-    radio_black: web_sys::HtmlInputElement,
-    radio_red: web_sys::HtmlInputElement,
-    radio_orange: web_sys::HtmlInputElement,
-    radio_green: web_sys::HtmlInputElement,
-    radio_blue: web_sys::HtmlInputElement,
-    radio_sky_blue: web_sys::HtmlInputElement,
-
-    canvases: web_sys::HtmlDivElement,
-    main_renderer: web::Renderer,
-    sub_renderer: web::Renderer,
-
-    offset: Coordinate<i32>,
+fn adjust_canvas_size<'a>(
+    board: &web_sys::HtmlDivElement,
+    canvases: impl IntoIterator<Item = &'a web::Canvas>,
+) {
+    let size = OnScreen(Coordinate {
+        x: board.client_width() as u32,
+        y: board.client_height() as u32,
+    });
+    for canvas in canvases {
+        canvas.resize(size);
+    }
 }
 
-impl View {
-    pub fn init(window: web_sys::Window) -> Self {
-        let document = window.document().expect("document does not exist");
-        let body = document.body().expect("body does not exist");
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Enum)]
+pub enum Layer {
+    Main,
+    Sub,
+    Temp,
+}
 
-        macro_rules! get {
-            ($(let $id:ident: $ty:ty;)*) => {$(
-                let id = stringify!($id).replace('_', "-");
-                let $id = document
-                    .get_element_by_id(&id)
-                    .unwrap_or_else(|| panic!("element '{}' does not exist", id))
-                    .dyn_into::<$ty>()
-                    .expect("element type mismatch");
-            )*};
-        }
-        get! {
-            let radio_selector: web_sys::HtmlInputElement;
-            let radio_pen: web_sys::HtmlInputElement;
-            let radio_eraser: web_sys::HtmlInputElement;
-            let button_clear: web_sys::HtmlButtonElement;
+#[derive(Clone, Debug)]
+pub struct LayerHandle {
+    canvas: web::Canvas,
+}
 
-            let radio_black: web_sys::HtmlInputElement;
-            let radio_red: web_sys::HtmlInputElement;
-            let radio_orange: web_sys::HtmlInputElement;
-            let radio_green: web_sys::HtmlInputElement;
-            let radio_blue: web_sys::HtmlInputElement;
-            let radio_sky_blue: web_sys::HtmlInputElement;
-
-            let canvases: web_sys::HtmlDivElement;
-            let canvas_main: web_sys::HtmlCanvasElement;
-            let canvas_sub: web_sys::HtmlCanvasElement;
-        };
-
-        let main_renderer = web::Renderer::new(&canvas_main, |ctx| {
-            ctx.set_line_cap("round");
-            ctx.set_line_join("round");
-            ctx.set_line_width(2.0);
-        });
-
-        let sub_renderer = web::Renderer::new(&canvas_sub, |ctx| {
-            thread_local! {
-                static FILL_STYLE: JsValue = JsValue::from_str("rgba(0, 90, 255, 0.2)");
-                static LINE_DASH: JsValue =
-                    JsValue::from_serde(&[8, 4]).expect("failed to serialize");
-            }
-            FILL_STYLE.with(|val| ctx.set_fill_style(val));
-            LINE_DASH.with(|val| ctx.set_line_dash(val).expect("exception thrown"));
-        });
-
-        let width = body.client_width() as u32;
-        let height = body.client_height() as u32;
-        main_renderer.resize(width, height);
-        sub_renderer.resize(width, height);
-
-        Self {
-            window,
-            document,
-            body,
-            radio_selector,
-            radio_pen,
-            radio_eraser,
-            button_clear,
-            radio_black,
-            radio_red,
-            radio_orange,
-            radio_green,
-            radio_blue,
-            radio_sky_blue,
-            canvases,
-            main_renderer,
-            sub_renderer,
-            offset: Coordinate::default(),
-        }
+impl LayerHandle {
+    fn new(canvas: web::Canvas) -> Self {
+        Self { canvas }
     }
 
-    pub fn listen_events(self, ctrl: Controller) {
-        let mut view = self.clone();
-        let mut ctrl = Rc::new(RefCell::new(ctrl));
-
-        macro_rules! listen {
-            ($elem:expr, $event:expr, $closure:expr) => {
-                let view_clone = view.clone();
-                let ctrl_clone = Rc::clone(&ctrl);
-                $elem
-                    .add_event_listener_with_callback(
-                        $event,
-                        &Closure::wrap(Box::new($closure) as Box<dyn FnMut(_)>)
-                            .into_js_value()
-                            .unchecked_into::<js_sys::Function>(),
-                    )
-                    .expect("exception thrown");
-                #[allow(unused_assignments)]
-                {
-                    view = view_clone;
-                    ctrl = ctrl_clone;
-                }
-            };
-        }
-
-        listen!(self.window, "resize", {
-            let body = self.body;
-            move |_: web_sys::UiEvent| {
-                let width = body.client_width() as u32;
-                let height = body.client_height() as u32;
-                view.main_renderer.resize(width, height);
-                view.sub_renderer.resize(width, height);
-                ctrl.borrow().rerender();
-            }
-        });
-
-        listen!(
-            self.document,
-            "keydown",
-            move |event: web_sys::KeyboardEvent| {
-                let key_input = web::KeyInput::from(event);
-                ctrl.borrow_mut().on_key_down(key_input);
-            }
-        );
-
-        listen!(
-            self.radio_selector,
-            "click",
-            move |_: web_sys::MouseEvent| {
-                ctrl.borrow_mut().set_tool(Tool::Selector);
-            }
-        );
-
-        listen!(self.radio_pen, "click", move |_: web_sys::MouseEvent| {
-            ctrl.borrow_mut().set_tool(Tool::Pen);
-        });
-
-        listen!(self.radio_eraser, "click", move |_: web_sys::MouseEvent| {
-            ctrl.borrow_mut().set_tool(Tool::Eraser);
-        });
-
-        listen!(self.button_clear, "click", move |_: web_sys::MouseEvent| {
-            ctrl.borrow_mut().clear();
-        });
-
-        listen!(self.radio_black, "click", move |_: web_sys::MouseEvent| {
-            ctrl.borrow_mut().set_pen_color(Color::Black);
-        });
-
-        listen!(self.radio_red, "click", move |_: web_sys::MouseEvent| {
-            ctrl.borrow_mut().set_pen_color(Color::Red);
-        });
-
-        listen!(self.radio_orange, "click", move |_: web_sys::MouseEvent| {
-            ctrl.borrow_mut().set_pen_color(Color::Orange);
-        });
-
-        listen!(self.radio_green, "click", move |_: web_sys::MouseEvent| {
-            ctrl.borrow_mut().set_pen_color(Color::Green);
-        });
-
-        listen!(self.radio_blue, "click", move |_: web_sys::MouseEvent| {
-            ctrl.borrow_mut().set_pen_color(Color::Blue);
-        });
-
-        listen!(
-            self.radio_sky_blue,
-            "click",
-            move |_: web_sys::MouseEvent| {
-                ctrl.borrow_mut().set_pen_color(Color::SkyBlue);
-            }
-        );
-
-        listen!(
-            self.canvases,
-            "pointerdown",
-            move |event: web_sys::MouseEvent| {
-                let button = web::mouse_event_button(&event);
-                let coord = web::mouse_event_offset(&event);
-                ctrl.borrow_mut().on_pointer_down(button, coord);
-            }
-        );
-
-        listen!(
-            self.canvases,
-            "pointermove",
-            move |event: web_sys::MouseEvent| {
-                let coord = web::mouse_event_offset(&event);
-                ctrl.borrow_mut().on_pointer_move(coord);
-            }
-        );
-
-        listen!(self.canvases, "pointerup", move |_: web_sys::MouseEvent| {
-            ctrl.borrow_mut().on_pointer_up();
-        });
-    }
-
-    pub fn size(&self) -> Coordinate<i32> {
-        let canvas = self.main_renderer.canvas();
-        Coordinate {
-            x: canvas.width() as _,
-            y: canvas.height() as _,
-        }
-    }
-
-    pub fn set_tool(&self, tool: Tool) {
-        let radio = match tool {
-            Tool::Selector => &self.radio_selector,
-            Tool::Pen => &self.radio_pen,
-            Tool::Eraser => &self.radio_eraser,
-        };
-        radio.set_checked(true);
-    }
-
-    pub fn set_pen_color(&self, color: Color) {
-        let radio = match color {
-            Color::Black => &self.radio_black,
-            Color::Red => &self.radio_red,
-            Color::Orange => &self.radio_orange,
-            Color::Green => &self.radio_green,
-            Color::Blue => &self.radio_blue,
-            Color::SkyBlue => &self.radio_sky_blue,
-        };
-        radio.set_checked(true);
-    }
-
-    pub fn clear_main_canvas(&self) {
-        self.main_renderer.clear();
-    }
-
-    pub fn clear_sub_canvas(&self) {
-        self.sub_renderer.clear();
+    pub fn translate(&self, delta: Coordinate<i32>) {
+        self.canvas.translate(delta);
     }
 
     pub fn render_path(&self, path: &RenderablePath) {
-        self.main_renderer.set_stroke_color(path.color);
-        self.main_renderer.stroke_path(path.path_obj());
+        self.set_style_for_path();
+        self.canvas.set_stroke_color(path.get().get().color);
+        self.canvas.stroke_path_obj(path.get().path_obj());
+    }
+
+    pub fn render_bounding_rect_of(&self, path: &RenderablePath) {
+        self.set_style_for_bounding_rect();
+        self.canvas.stroke_path_obj(path.bounding_rect().path_obj());
     }
 
     pub fn render_curve(
@@ -272,29 +62,202 @@ impl View {
         control: Coordinate<i32>,
         end: Coordinate<i32>,
     ) {
-        self.main_renderer.set_stroke_color(color);
-        self.main_renderer
-            .stroke_quadratic_curve(start, control, end);
+        self.set_style_for_path();
+        self.canvas.set_stroke_color(color);
+        self.canvas.stroke_curve(start, control, end);
     }
 
     pub fn render_selection_rect(&self, rect: Rect<i32>) {
-        self.sub_renderer.fill_rect(rect);
+        self.set_style_for_selection_rect();
+        self.canvas.fill_rect(rect);
     }
 
-    pub fn render_bounding_rect(&self, path: &RenderablePath) {
-        self.sub_renderer.stroke_path(path.bounding_rect_obj());
+    pub fn clear(&self) {
+        self.canvas.clear();
+    }
+
+    fn set_style_for_path(&self) {
+        self.canvas
+            .ctx
+            .set_line_dash(&js_sys::Array::new())
+            .expect("unexpected exception");
+        self.canvas.ctx.set_line_cap("round");
+        self.canvas.ctx.set_line_join("round");
+        self.canvas.ctx.set_line_width(2.0);
+    }
+
+    fn set_style_for_selection_rect(&self) {
+        thread_local! {
+            static FILL_STYLE: JsValue = JsValue::from_str("rgba(0,90,255,0.15)");
+        }
+        FILL_STYLE.with(|val| self.canvas.ctx.set_fill_style(val));
+    }
+
+    fn set_style_for_bounding_rect(&self) {
+        thread_local! {
+            static LINE_DASH: js_sys::Array =
+                js_sys::Array::of2(&JsValue::from_f64(8.), &JsValue::from_f64(6.));
+        }
+        LINE_DASH.with(|val| {
+            self.canvas
+                .ctx
+                .set_line_dash(val)
+                .expect("unexpected exception");
+        });
+        self.canvas.ctx.set_line_cap("butt");
+        self.canvas.ctx.set_line_join("butt");
+        self.canvas.ctx.set_line_width(1.0);
+        self.canvas.set_stroke_color(Color::Black);
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct View {
+    board: web_sys::HtmlDivElement,
+    pub layers: EnumMap<Layer, LayerHandle>,
+    offset: Coordinate<i32>,
+
+    tool_radios: EnumMap<Tool, web_sys::HtmlInputElement>,
+    pen_color_radios: EnumMap<Color, web_sys::HtmlInputElement>,
+    button_clear: web_sys::HtmlButtonElement,
+}
+
+impl View {
+    pub fn init() -> Self {
+        web::bind_elements! {
+            let board;
+            let canvas_main: web_sys::HtmlCanvasElement;
+            let canvas_sub: web_sys::HtmlCanvasElement;
+            let canvas_temp: web_sys::HtmlCanvasElement;
+
+            let radio_selector: web_sys::HtmlInputElement;
+            let radio_pen: web_sys::HtmlInputElement;
+            let radio_eraser: web_sys::HtmlInputElement;
+
+            let radio_black: web_sys::HtmlInputElement;
+            let radio_red: web_sys::HtmlInputElement;
+            let radio_orange: web_sys::HtmlInputElement;
+            let radio_green: web_sys::HtmlInputElement;
+            let radio_blue: web_sys::HtmlInputElement;
+            let radio_sky_blue: web_sys::HtmlInputElement;
+
+            let button_clear;
+        }
+
+        let canvas_main = web::Canvas::from(canvas_main);
+        let canvas_sub = web::Canvas::from(canvas_sub);
+        let canvas_temp = web::Canvas::from(canvas_temp);
+
+        adjust_canvas_size(&board, [&canvas_main, &canvas_sub, &canvas_temp]);
+
+        Self {
+            board,
+            layers: enum_map! {
+                Layer::Main => LayerHandle::new(canvas_main.clone()),
+                Layer::Sub => LayerHandle::new(canvas_sub.clone()),
+                Layer::Temp => LayerHandle::new(canvas_temp.clone()),
+            },
+            offset: Coordinate::zero(),
+
+            tool_radios: enum_map! {
+                Tool::Selector => radio_selector.clone(),
+                Tool::Pen => radio_pen.clone(),
+                Tool::Eraser => radio_eraser.clone(),
+            },
+            pen_color_radios: enum_map! {
+                Color::Black => radio_black.clone(),
+                Color::Red => radio_red.clone(),
+                Color::Orange => radio_orange.clone(),
+                Color::Green => radio_green.clone(),
+                Color::Blue => radio_blue.clone(),
+                Color::SkyBlue => radio_sky_blue.clone(),
+            },
+            button_clear,
+        }
+    }
+
+    pub fn listen_events(self, ctrl: Controller) {
+        let ctrl = Rc::new(RefCell::new(ctrl));
+
+        web::WINDOW.with({
+            let board = self.board.clone();
+            let layers = self.layers;
+            let ctrl = Rc::clone(&ctrl);
+            move |window| {
+                web::listen_event(window, "resize", move |_: web_sys::UiEvent| {
+                    adjust_canvas_size(&board, layers.values().map(|l| &l.canvas));
+                    ctrl.borrow().rerender();
+                });
+            }
+        });
+
+        web::DOCUMENT.with({
+            let ctrl = Rc::clone(&ctrl);
+            move |document| {
+                web::listen_event(document, "keydown", move |event: web_sys::KeyboardEvent| {
+                    ctrl.borrow_mut().on_key_down(event.into())
+                });
+            }
+        });
+
+        for (tool, radio) in &self.tool_radios {
+            web::listen_event(radio, "click", {
+                let ctrl = Rc::clone(&ctrl);
+                move |_: web_sys::MouseEvent| ctrl.borrow_mut().set_tool(tool)
+            });
+        }
+
+        for (color, radio) in &self.pen_color_radios {
+            web::listen_event(radio, "click", {
+                let ctrl = Rc::clone(&ctrl);
+                move |_: web_sys::MouseEvent| ctrl.borrow_mut().set_pen_color(color)
+            });
+        }
+
+        web::listen_event(&self.button_clear, "click", {
+            let ctrl = Rc::clone(&ctrl);
+            move |_: web_sys::MouseEvent| ctrl.borrow_mut().clear_paths()
+        });
+
+        web::listen_event(&self.board, "pointerdown", {
+            let ctrl = Rc::clone(&ctrl);
+            move |event: web_sys::MouseEvent| ctrl.borrow_mut().on_pointer_down(event.into())
+        });
+
+        web::listen_event(&self.board, "pointermove", {
+            let ctrl = Rc::clone(&ctrl);
+            move |event: web_sys::MouseEvent| ctrl.borrow_mut().on_pointer_move(event.into())
+        });
+
+        web::listen_event(&self.board, "pointerup", {
+            let ctrl = Rc::clone(&ctrl);
+            move |_: web_sys::MouseEvent| ctrl.borrow_mut().on_pointer_up()
+        });
+    }
+
+    pub fn size(&self) -> OnScreen<Coordinate<u32>> {
+        self.layers[Layer::Main].canvas.size()
     }
 
     pub fn translate(&mut self, delta: Coordinate<i32>) {
-        self.main_renderer.translate(delta);
-        self.sub_renderer.translate(delta);
+        for layer in self.layers.values() {
+            layer.translate(delta);
+        }
         self.offset = self.offset + delta;
-        self.body
+        self.board
             .style()
             .set_property(
                 "background-position",
                 &format!("{}px {}px", self.offset.x, self.offset.y),
             )
-            .expect("exception thrown");
+            .expect("unexpected exception");
+    }
+
+    pub fn select_tool(&self, tool: Tool) {
+        self.tool_radios[tool].set_checked(true);
+    }
+
+    pub fn select_pen_color(&self, color: Color) {
+        self.pen_color_radios[color].set_checked(true);
     }
 }

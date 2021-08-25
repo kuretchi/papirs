@@ -1,17 +1,20 @@
+//! A controller, which recieves events from the view and manipulates the model.
+
 use crate::{
-    common::{utils, Color, Path, PathId, RenderablePath, Tool},
-    model::Model,
+    common::{Color, OnScreen, Path, PathId, RenderablePath, Tool},
+    model::{self, Model},
+    utils::{self, MapScalars},
     web,
 };
-use delegate_attr::delegate;
 use enum_dispatch::enum_dispatch;
 use geo::{prelude::*, Coordinate, Line, LineString, Rect};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
+use std::iter;
 
 #[enum_dispatch]
 trait Handler {
-    fn move_to(&mut self, model: &mut Model, coord: Coordinate<i32>);
-    fn finish(self, model: &mut Model);
+    fn move_to(&mut self, model: model::DeferCommit, coord: OnScreen<Coordinate<i32>>);
+    fn finish(self, model: model::DeferCommit);
 }
 
 #[enum_dispatch(Handler)]
@@ -19,32 +22,30 @@ trait Handler {
 enum AnyHandler {
     Scroll(ScrollHandler),
     Select(SelectHandler),
-    Move(MoveHandler),
+    Shift(ShiftHandler),
     Draw(DrawHandler),
     Erase(EraseHandler),
 }
 
 #[derive(Debug)]
 struct ScrollHandler {
-    prev_coord: Coordinate<i32>,
+    prev_coord: OnScreen<Coordinate<i32>>,
 }
 
 impl ScrollHandler {
-    pub fn new(coord: Coordinate<i32>) -> Self {
+    pub fn new(coord: OnScreen<Coordinate<i32>>) -> Self {
         Self { prev_coord: coord }
     }
 }
 
 impl Handler for ScrollHandler {
-    fn move_to(&mut self, model: &mut Model, coord: Coordinate<i32>) {
-        let delta = coord - self.prev_coord;
-        model.updater().scroll(delta);
+    fn move_to(&mut self, mut model: model::DeferCommit, coord: OnScreen<Coordinate<i32>>) {
+        let delta = coord.0 - self.prev_coord.0;
+        model.scroll(delta);
         self.prev_coord = coord;
     }
 
-    fn finish(self, model: &mut Model) {
-        model.fix_scroll();
-    }
+    fn finish(self, _: model::DeferCommit) {}
 }
 
 #[derive(Debug)]
@@ -54,8 +55,8 @@ struct SelectHandler {
 }
 
 impl SelectHandler {
-    pub fn new(model: &Model, coord: Coordinate<i32>) -> Self {
-        let coord = coord - model.offset();
+    pub fn new(model: &Model, coord: OnScreen<Coordinate<i32>>) -> Self {
+        let coord = model.coord_at(coord);
         Self {
             start_coord: coord,
             prev_coord: coord,
@@ -64,75 +65,79 @@ impl SelectHandler {
 }
 
 impl Handler for SelectHandler {
-    fn move_to(&mut self, model: &mut Model, coord: Coordinate<i32>) {
-        let coord = coord - model.offset();
+    fn move_to(&mut self, mut model: model::DeferCommit, coord: OnScreen<Coordinate<i32>>) {
+        let coord = model.coord_at(coord);
         let whole_rect = Rect::new(self.start_coord, coord);
         let diff = utils::rect_diff(self.start_coord, self.prev_coord, coord);
-        {
-            let mut updater = model.updater();
-            for removed_rect in diff.removed {
-                updater.unselect_paths(removed_rect);
-            }
-            for added_rect in diff.added {
-                updater.select_paths(whole_rect, added_rect);
-            }
-            updater.skip_rerendering();
+        for removed_rect in diff.removed {
+            model.unselect_paths_with(removed_rect);
         }
-        model.rerender_sub(); // remove old selection rect
-        model.view().render_selection_rect(whole_rect);
+        for added_rect in diff.added {
+            model.select_paths_with(whole_rect, added_rect);
+        }
+        model.temp_layer().clear();
+        model.temp_layer().render_selection_rect(whole_rect);
         self.prev_coord = coord;
     }
 
-    fn finish(self, model: &mut Model) {
-        model.rerender_sub(); // remove selection rect
+    fn finish(self, model: model::DeferCommit) {
+        model.temp_layer().clear();
     }
 }
 
 #[derive(Debug)]
-struct MoveHandler {
-    moving_paths: FxHashMap<PathId, RenderablePath>,
+struct ShiftHandler {
+    shifting_path_ids: FxHashSet<PathId>,
     start_coord: Coordinate<i32>,
     prev_coord: Coordinate<i32>,
 }
 
-impl MoveHandler {
-    pub fn new(model: &mut Model, coord: Coordinate<i32>) -> Self {
-        let coord = coord - model.offset();
-        let moving_paths = model
+impl ShiftHandler {
+    pub fn new(mut model: model::DeferCommit, coord: OnScreen<Coordinate<i32>>) -> Self {
+        let coord = model.coord_at(coord);
+        let shifting_path_ids = model
             .selected_paths()
-            .map(|(id, path)| (id, path.clone()))
-            .collect::<FxHashMap<_, _>>();
-        let mut updater = model.updater();
-        updater.hide_paths(moving_paths.keys().copied());
-        updater.skip_rerendering(); // prevent immediately hiding
-        Self {
-            moving_paths,
+            .map(|(id, _)| id)
+            .collect::<FxHashSet<_>>();
+        for &id in &shifting_path_ids {
+            model.hide_path(id);
+        }
+        let this = Self {
+            shifting_path_ids,
             start_coord: coord,
             prev_coord: coord,
+        };
+        this.rerender(&*model);
+        this
+    }
+
+    fn rerender(&self, model: &Model) {
+        model.temp_layer().clear();
+        for &id in &self.shifting_path_ids {
+            let path = model.path(id);
+            model.temp_layer().render_path(path);
+            model.temp_layer().render_bounding_rect_of(path);
         }
     }
 }
 
-impl Handler for MoveHandler {
-    fn move_to(&mut self, model: &mut Model, coord: Coordinate<i32>) {
-        let coord = coord - model.offset();
+impl Handler for ShiftHandler {
+    fn move_to(&mut self, model: model::DeferCommit, coord: OnScreen<Coordinate<i32>>) {
+        let coord = model.coord_at(coord);
         let delta = coord - self.prev_coord;
-        for path in self.moving_paths.values_mut() {
-            path.update(|path| path.line_string.translate_inplace(delta.x, delta.y));
-        }
-        model.rerender(); // remove previously rendered moving paths
-        for path in self.moving_paths.values() {
-            model.view().render_path(path);
-            model.view().render_bounding_rect(path);
-        }
+        model.temp_layer().translate(delta);
+        self.rerender(&*model);
         self.prev_coord = coord;
     }
 
-    fn finish(self, model: &mut Model) {
+    fn finish(self, mut model: model::DeferCommit) {
         let delta = self.prev_coord - self.start_coord;
-        let mut updater = model.updater();
-        updater.move_paths(self.moving_paths.keys().copied(), delta);
-        updater.unhide_paths(self.moving_paths.keys().copied());
+        model.temp_layer().clear();
+        model.temp_layer().translate(-delta);
+        model.shift_paths(self.shifting_path_ids.iter().copied(), delta);
+        for id in self.shifting_path_ids {
+            model.unhide_path(id);
+        }
     }
 }
 
@@ -142,8 +147,8 @@ struct DrawHandler {
 }
 
 impl DrawHandler {
-    pub fn new(model: &Model, coord: Coordinate<i32>) -> Self {
-        let coord = coord - model.offset();
+    pub fn new(model: &Model, coord: OnScreen<Coordinate<i32>>) -> Self {
+        let coord = model.coord_at(coord);
         Self {
             coords: vec![coord],
         }
@@ -151,33 +156,38 @@ impl DrawHandler {
 }
 
 impl Handler for DrawHandler {
-    fn move_to(&mut self, model: &mut Model, coord: Coordinate<i32>) {
-        let coord = coord - model.offset();
-        let mut it = self.coords.iter().rev();
-        let c_0 = coord;
-        let c_1 = it
-            .next()
-            .copied()
-            .expect("`self.coords` should not be empty");
-        let c_2 = it.next().copied().unwrap_or(c_0);
-        let mid_0_1 = (c_0 + c_1) / 2;
-        let mid_1_2 = (c_1 + c_2) / 2;
+    fn move_to(&mut self, model: model::DeferCommit, coord: OnScreen<Coordinate<i32>>) {
+        let coord = model.coord_at(coord);
+        let (start, control, end) = {
+            let mut it = self.coords.iter().rev();
+            let c_0 = coord;
+            let c_1 = it
+                .next()
+                .copied()
+                .expect("`self.coords` should not be empty");
+            let c_2 = it.next().copied().unwrap_or(c_0);
+            let mid_0_1 = (c_0 + c_1) / 2;
+            let mid_1_2 = (c_1 + c_2) / 2;
+            (mid_0_1, c_1, mid_1_2)
+        };
         model
-            .view()
-            .render_curve(model.pen_color(), mid_0_1, c_1, mid_1_2);
+            .temp_layer()
+            .render_curve(model.pen_color(), start, control, end);
         self.coords.push(coord);
     }
 
-    fn finish(self, model: &mut Model) {
-        let line_string = LineString::from(self.coords)
-            .map_coords(|&(x, y)| (f64::from(x), f64::from(y)))
+    fn finish(self, mut model: model::DeferCommit) {
+        let coords = LineString::from(self.coords)
+            .map_scalars(f64::from)
             .simplify(&0.5)
-            .map_coords(|&(x, y)| (x as _, y as _));
+            .map_scalars(|s| s as _);
         let path = Path {
             color: model.pen_color(),
-            line_string,
+            coords,
         };
-        model.updater().add_new_path(path);
+        let path = RenderablePath::new(path).expect("`path` should not be empty");
+        model.temp_layer().clear();
+        model.insert_paths(iter::once((PathId::gen(), path)));
     }
 }
 
@@ -188,8 +198,8 @@ struct EraseHandler {
 }
 
 impl EraseHandler {
-    pub fn new(model: &Model, coord: Coordinate<i32>) -> Self {
-        let coord = coord - model.offset();
+    pub fn new(model: &Model, coord: OnScreen<Coordinate<i32>>) -> Self {
+        let coord = model.coord_at(coord);
         Self {
             removing_path_ids: FxHashSet::default(),
             prev_coord: coord,
@@ -198,8 +208,8 @@ impl EraseHandler {
 }
 
 impl Handler for EraseHandler {
-    fn move_to(&mut self, model: &mut Model, coord: Coordinate<i32>) {
-        let coord = coord - model.offset();
+    fn move_to(&mut self, mut model: model::DeferCommit, coord: OnScreen<Coordinate<i32>>) {
+        let coord = model.coord_at(coord);
         let eraser_line = Line::new(self.prev_coord, coord);
         let ids = model
             .bounding_tile_items(eraser_line)
@@ -209,95 +219,102 @@ impl Handler for EraseHandler {
             })
             .map(|(id, _)| id)
             .collect::<Vec<_>>();
-        self.prev_coord = coord;
+        for &id in &ids {
+            model.hide_path(id);
+        }
         self.removing_path_ids.extend(ids.iter().copied());
-        model.updater().hide_paths(ids.iter().copied());
+        self.prev_coord = coord;
     }
 
-    fn finish(self, model: &mut Model) {
-        model.updater().remove_paths(self.removing_path_ids);
+    fn finish(self, mut model: model::DeferCommit) {
+        model.remove_paths(self.removing_path_ids);
     }
 }
 
+#[derive(Debug)]
 pub struct Controller {
+    active_handler: Option<AnyHandler>,
     model: Model,
-    handler: Option<AnyHandler>,
-}
-
-#[delegate(self.model)]
-#[rustfmt::skip]
-impl Controller {
-    pub fn set_pen_color(&mut self, color: Color);
-    pub fn rerender(&self);
-}
-
-#[delegate(self.model.updater())]
-#[rustfmt::skip]
-impl Controller {
-    pub fn set_tool(&mut self, tool: Tool);
-    pub fn clear(&mut self);
 }
 
 impl Controller {
     pub fn new(model: Model) -> Self {
         Self {
+            active_handler: None,
             model,
-            handler: None,
         }
     }
 
-    pub fn on_key_down(&mut self, key_input: web::KeyInput) {
-        match key_input.key().as_str() {
+    pub fn rerender(&self) {
+        self.model.force_rerender();
+    }
+
+    pub fn set_tool(&mut self, tool: Tool) {
+        self.model.defer_commit().set_tool(tool);
+    }
+
+    pub fn set_pen_color(&mut self, color: Color) {
+        self.model.defer_commit().set_pen_color(color);
+    }
+
+    pub fn clear_paths(&mut self) {
+        self.model.defer_commit().clear_paths();
+    }
+
+    pub fn on_key_down(&mut self, event: web::KeyboardEvent) {
+        let mut model = self.model.defer_commit();
+        match event.key.as_str() {
             "Delete" => {
-                self.model.updater().remove_selected_paths();
+                model.remove_selected_paths();
             }
-            "z" if key_input.with_ctrl() => {
-                self.model.updater().undo();
+            "z" if event.ctrl_key => {
+                model.undo();
             }
-            "y" if key_input.with_ctrl() => {
-                self.model.updater().redo();
+            "y" if event.ctrl_key => {
+                model.redo();
             }
             _ => {}
         }
     }
 
-    pub fn on_pointer_down(&mut self, button: web::MouseButton, coord: Coordinate<i32>) {
-        if self.handler.is_some() {
+    pub fn on_pointer_down(&mut self, event: web::MouseEvent) {
+        if self.active_handler.is_some() {
             return;
         }
-        match button {
+        let mut model = self.model.defer_commit();
+        match event.button {
             web::MouseButton::Left => {
-                if self.model.selected_paths().any(|(_, path)| {
+                if model.selected_paths().any(|(_, path)| {
                     path.bounding_rect()
-                        .contains(&(coord - self.model.offset()))
+                        .get()
+                        .contains(&model.coord_at(event.coord))
                 }) {
-                    self.handler = Some(MoveHandler::new(&mut self.model, coord).into());
+                    self.active_handler = Some(ShiftHandler::new(model, event.coord).into());
                 } else {
-                    self.model.view().clear_sub_canvas();
-                    self.model.updater().unselect_all_paths();
-                    self.handler = Some(match self.model.tool() {
-                        Tool::Selector => SelectHandler::new(&self.model, coord).into(),
-                        Tool::Pen => DrawHandler::new(&self.model, coord).into(),
-                        Tool::Eraser => EraseHandler::new(&self.model, coord).into(),
+                    model.unselect_all_paths();
+                    self.active_handler = Some(match model.tool() {
+                        Tool::Selector => SelectHandler::new(&*model, event.coord).into(),
+                        Tool::Pen => DrawHandler::new(&*model, event.coord).into(),
+                        Tool::Eraser => EraseHandler::new(&*model, event.coord).into(),
                     });
                 }
             }
             web::MouseButton::Middle => {
-                self.handler = Some(ScrollHandler::new(coord).into());
+                self.active_handler = Some(ScrollHandler::new(event.coord).into());
             }
             web::MouseButton::Other => {}
         }
     }
 
-    pub fn on_pointer_move(&mut self, coord: Coordinate<i32>) {
-        if let Some(h) = &mut self.handler {
-            h.move_to(&mut self.model, coord);
+    pub fn on_pointer_move(&mut self, event: web::MouseEvent) {
+        if let Some(h) = &mut self.active_handler {
+            h.move_to(self.model.defer_commit(), event.coord);
         }
     }
 
     pub fn on_pointer_up(&mut self) {
-        if let Some(h) = self.handler.take() {
-            h.finish(&mut self.model);
+        if let Some(h) = self.active_handler.take() {
+            h.finish(self.model.defer_commit());
         }
     }
 }

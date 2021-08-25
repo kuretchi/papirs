@@ -40,7 +40,9 @@ impl<C> History<C> {
     }
 
     pub fn start_undo(&mut self) -> Option<C> {
-        assert!(self.state.is_none(), "previous operation not finished");
+        if let Some(state) = self.state {
+            panic!("previous operation not finished: {:?}", state);
+        }
         let com = self.undo_stack.pop();
         if com.is_some() {
             self.state = Some(State::Undoing);
@@ -49,7 +51,9 @@ impl<C> History<C> {
     }
 
     pub fn start_redo(&mut self) -> Option<C> {
-        assert!(self.state.is_none(), "previous operation not finished");
+        if let Some(state) = self.state {
+            panic!("previous operation not finished: {:?}", state);
+        }
         let com = self.redo_stack.pop();
         if com.is_some() {
             self.state = Some(State::Redoing);

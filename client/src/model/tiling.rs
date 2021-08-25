@@ -1,24 +1,38 @@
-use crate::common::{utils, PathId};
+use crate::{common::PathId, utils};
 use geo::{prelude::*, Coordinate, Line, LineString, Rect};
 use itertools::Itertools as _;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::iter::FromIterator;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 struct TileId(Coordinate<i32>);
 
 #[derive(Default, Debug)]
 pub(super) struct Tiling {
-    tile_items: FxHashMap<TileId, FxHashMap<PathId, Vec<Line<i32>>>>,
+    tiles: FxHashMap<TileId, FxHashMap<PathId, Vec<Line<i32>>>>,
     tile_ids: FxHashMap<PathId, Vec<TileId>>,
 }
 
+impl<'a> FromIterator<(PathId, &'a LineString<i32>)> for Tiling {
+    fn from_iter<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item = (PathId, &'a LineString<i32>)>,
+    {
+        let mut this = Self::default();
+        for (path_id, coords) in iter {
+            this.insert_path(path_id, coords);
+        }
+        this
+    }
+}
+
 impl Tiling {
-    const TILE_LEN: i32 = 100;
+    const TILE_LEN: i32 = 128;
 
     fn tile_rect(id: TileId) -> Rect<i32> {
         Rect::new(
-            utils::coordinate_map(id.0, |d| d * Self::TILE_LEN),
-            utils::coordinate_map(id.0, |d| (d + 1) * Self::TILE_LEN),
+            utils::coord_map_scalars(id.0, |s| s * Self::TILE_LEN),
+            utils::coord_map_scalars(id.0, |s| (s + 1) * Self::TILE_LEN),
         )
     }
 
@@ -26,12 +40,8 @@ impl Tiling {
         geo: impl BoundingRect<i32, Output = Rect<i32>> + Intersects<Rect<i32>>,
     ) -> impl Iterator<Item = TileId> {
         let rect = geo.bounding_rect();
-        let xs = (rect.min().x.div_euclid(Self::TILE_LEN)
-            ..=rect.max().x.div_euclid(Self::TILE_LEN))
-            .dedup();
-        let ys = (rect.min().y.div_euclid(Self::TILE_LEN)
-            ..=rect.max().y.div_euclid(Self::TILE_LEN))
-            .dedup();
+        let xs = rect.min().x.div_euclid(Self::TILE_LEN)..=rect.max().x.div_euclid(Self::TILE_LEN);
+        let ys = rect.min().y.div_euclid(Self::TILE_LEN)..=rect.max().y.div_euclid(Self::TILE_LEN);
         xs.cartesian_product(ys)
             .map(|(x, y)| TileId(Coordinate { x, y }))
             .filter(move |&id| geo.intersects(&Self::tile_rect(id)))
@@ -42,15 +52,15 @@ impl Tiling {
         geo: impl BoundingRect<i32, Output = Rect<i32>> + Intersects<Rect<i32>>,
     ) -> impl Iterator<Item = (PathId, &[Line<i32>])> {
         Self::bounding_tile_ids(geo)
-            .flat_map(move |tile_id| self.tile_items.get(&tile_id).into_iter().flatten())
+            .flat_map(move |tile_id| self.tiles.get(&tile_id).into_iter().flatten())
             .map(|(&path_id, lines)| (path_id, lines.as_slice()))
     }
 
-    pub fn insert_path(&mut self, path_id: PathId, lines: &LineString<i32>) {
+    pub fn insert_path(&mut self, path_id: PathId, coords: &LineString<i32>) {
         let mut tile_ids = FxHashSet::default();
-        for line in lines.lines() {
+        for line in coords.lines() {
             for tile_id in Self::bounding_tile_ids(line) {
-                self.tile_items
+                self.tiles
                     .entry(tile_id)
                     .or_default()
                     .entry(path_id)
@@ -68,7 +78,7 @@ impl Tiling {
     pub fn remove_path(&mut self, path_id: PathId) {
         let tile_ids = self.tile_ids.remove(&path_id).expect("path not found");
         for tile_id in tile_ids {
-            self.tile_items
+            self.tiles
                 .get_mut(&tile_id)
                 .expect("tile not found")
                 .retain(|id, _| id != &path_id);
@@ -76,7 +86,7 @@ impl Tiling {
     }
 
     pub fn clear(&mut self) {
-        self.tile_items.clear();
+        self.tiles.clear();
         self.tile_ids.clear();
     }
 }
