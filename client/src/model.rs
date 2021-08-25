@@ -378,7 +378,8 @@ impl Model {
         {
             self.rerender_main_layer();
         }
-        if self.offset.is_updated()
+        if self.paths.is_updated()
+            || self.offset.is_updated()
             || self.selected_path_ids.is_updated()
             || self.hidden_path_ids.is_updated()
         {
