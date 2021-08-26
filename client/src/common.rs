@@ -2,6 +2,7 @@ use crate::{
     utils::{self, MapScalars as _},
     web,
 };
+use derive_more::{Add, Neg, Sub};
 use enum_map::Enum;
 use geo::{prelude::*, LineString, Rect};
 use serde::{de::Error as _, Deserialize, Deserializer, Serialize};
@@ -9,7 +10,7 @@ use std::mem;
 use uuid::Uuid;
 
 /// A marker that indicates that the wrapped coordinates are the actual screen's ones.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default, Debug, Add, Sub, Neg)]
 pub struct OnScreen<T>(pub T);
 
 impl<T> OnScreen<T> {

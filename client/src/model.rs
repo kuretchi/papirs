@@ -311,6 +311,11 @@ impl Model {
         coord.0 - *self.offset.get()
     }
 
+    pub fn delta_of(&self, delta: OnScreen<Coordinate<i32>>) -> Coordinate<i32> {
+        // consider scaling in the future
+        delta.0
+    }
+
     fn board_rect(&self) -> Rect<i32> {
         let origin = OnScreen(Coordinate::zero());
         let diagonal = self

@@ -40,7 +40,7 @@ impl ScrollHandler {
 
 impl Handler for ScrollHandler {
     fn move_to(&mut self, mut model: model::DeferCommit, coord: OnScreen<Coordinate<i32>>) {
-        let delta = coord.0 - self.prev_coord.0;
+        let delta = model.delta_of(coord - self.prev_coord);
         model.scroll(delta);
         self.prev_coord = coord;
     }
