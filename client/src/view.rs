@@ -181,7 +181,7 @@ impl View {
 
         web::WINDOW.with({
             let board = self.board.clone();
-            let layers = self.layers;
+            let layers = self.layers.clone();
             let ctrl = Rc::clone(&ctrl);
             move |window| {
                 web::listen_event(window, "resize", move |_: web_sys::UiEvent| {
@@ -217,6 +217,15 @@ impl View {
         web::listen_event(&self.button_clear, "click", {
             let ctrl = Rc::clone(&ctrl);
             move |_: web_sys::MouseEvent| ctrl.borrow_mut().clear_paths()
+        });
+
+        web::listen_event(&self.board, "wheel", {
+            let ctrl = Rc::clone(&ctrl);
+            let this = self.clone();
+            move |event: web_sys::WheelEvent| {
+                ctrl.borrow_mut()
+                    .on_wheel(web::WheelEvent::new(event, this.size()))
+            }
         });
 
         web::listen_event(&self.board, "pointerdown", {

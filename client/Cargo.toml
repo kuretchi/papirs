@@ -41,6 +41,7 @@ features = [
   'MouseEvent',
   'Path2d',
   'Storage',
+  'WheelEvent',
   'Window',
 ]
 

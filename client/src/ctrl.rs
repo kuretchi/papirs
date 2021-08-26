@@ -277,6 +277,12 @@ impl Controller {
         }
     }
 
+    pub fn on_wheel(&mut self, event: web::WheelEvent) {
+        let mut model = self.model.defer_commit();
+        let delta = model.delta_of(event.delta.map(|d| -d));
+        model.scroll(delta);
+    }
+
     pub fn on_pointer_down(&mut self, event: web::MouseEvent) {
         if self.active_handler.is_some() {
             return;

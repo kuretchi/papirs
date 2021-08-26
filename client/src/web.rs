@@ -8,7 +8,7 @@ use anyhow::{anyhow, Result};
 use geo::{CoordNum, Coordinate, LineString, Rect};
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
+use std::{cell::RefCell, mem};
 use wasm_bindgen::{convert::FromWasmAbi, prelude::*, JsCast as _};
 
 thread_local! {
@@ -54,6 +54,30 @@ impl From<web_sys::MouseEvent> for MouseEvent {
                 y: event.offset_y(),
             }),
         }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct WheelEvent {
+    pub delta: OnScreen<Coordinate<i32>>,
+}
+
+impl WheelEvent {
+    pub fn new(event: web_sys::WheelEvent, page_size: OnScreen<Coordinate<u32>>) -> Self {
+        let coef = match event.delta_mode() {
+            web_sys::WheelEvent::DOM_DELTA_PIXEL => Coordinate { x: 1., y: 1. },
+            web_sys::WheelEvent::DOM_DELTA_LINE => Coordinate { x: 25., y: 25. },
+            web_sys::WheelEvent::DOM_DELTA_PAGE => utils::coord_map_scalars(page_size.0, f64::from),
+            m => unreachable!("invaild `deltaMode`: {}", m),
+        };
+        let mut delta = OnScreen(Coordinate {
+            x: (event.delta_x() * coef.x) as _,
+            y: (event.delta_y() * coef.y) as _,
+        });
+        if event.shift_key() {
+            mem::swap(&mut delta.0.x, &mut delta.0.y);
+        }
+        Self { delta }
     }
 }
 
