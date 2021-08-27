@@ -339,6 +339,7 @@ impl Model {
         if tool != Tool::Selector {
             self.unselect_all_paths();
         }
+        self.view.select_tool(tool);
     }
 
     pub fn pen_color(&self) -> Color {
@@ -347,6 +348,7 @@ impl Model {
 
     pub fn set_pen_color(&mut self, color: Color) {
         *self.pen_color.get_mut() = color;
+        self.view.select_pen_color(color);
     }
 
     fn rerender_main_layer(&self) {

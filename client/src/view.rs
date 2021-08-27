@@ -118,7 +118,9 @@ pub struct View {
     offset: Coordinate<i32>,
 
     tool_radios: EnumMap<Tool, web_sys::HtmlInputElement>,
+    tool_radio_labels: EnumMap<Tool, web_sys::HtmlLabelElement>,
     pen_color_radios: EnumMap<Color, web_sys::HtmlInputElement>,
+    pen_color_radio_labels: EnumMap<Color, web_sys::HtmlLabelElement>,
     clear_button: web_sys::HtmlButtonElement,
 }
 
@@ -134,12 +136,23 @@ impl View {
             let tool_pen_radio: web_sys::HtmlInputElement;
             let tool_eraser_radio: web_sys::HtmlInputElement;
 
+            let tool_selector_radio_label: web_sys::HtmlLabelElement;
+            let tool_pen_radio_label: web_sys::HtmlLabelElement;
+            let tool_eraser_radio_label: web_sys::HtmlLabelElement;
+
             let pen_color_black_radio: web_sys::HtmlInputElement;
             let pen_color_red_radio: web_sys::HtmlInputElement;
             let pen_color_orange_radio: web_sys::HtmlInputElement;
             let pen_color_green_radio: web_sys::HtmlInputElement;
             let pen_color_blue_radio: web_sys::HtmlInputElement;
             let pen_color_sky_blue_radio: web_sys::HtmlInputElement;
+
+            let pen_color_black_radio_label: web_sys::HtmlLabelElement;
+            let pen_color_red_radio_label: web_sys::HtmlLabelElement;
+            let pen_color_orange_radio_label: web_sys::HtmlLabelElement;
+            let pen_color_green_radio_label: web_sys::HtmlLabelElement;
+            let pen_color_blue_radio_label: web_sys::HtmlLabelElement;
+            let pen_color_sky_blue_radio_label: web_sys::HtmlLabelElement;
 
             let clear_button;
         }
@@ -164,6 +177,11 @@ impl View {
                 Tool::Pen => tool_pen_radio.clone(),
                 Tool::Eraser => tool_eraser_radio.clone(),
             },
+            tool_radio_labels: enum_map! {
+                Tool::Selector => tool_selector_radio_label.clone(),
+                Tool::Pen => tool_pen_radio_label.clone(),
+                Tool::Eraser => tool_eraser_radio_label.clone(),
+            },
             pen_color_radios: enum_map! {
                 Color::Black => pen_color_black_radio.clone(),
                 Color::Red => pen_color_red_radio.clone(),
@@ -171,6 +189,14 @@ impl View {
                 Color::Green => pen_color_green_radio.clone(),
                 Color::Blue => pen_color_blue_radio.clone(),
                 Color::SkyBlue => pen_color_sky_blue_radio.clone(),
+            },
+            pen_color_radio_labels: enum_map! {
+                Color::Black => pen_color_black_radio_label.clone(),
+                Color::Red => pen_color_red_radio_label.clone(),
+                Color::Orange => pen_color_orange_radio_label.clone(),
+                Color::Green => pen_color_green_radio_label.clone(),
+                Color::Blue => pen_color_blue_radio_label.clone(),
+                Color::SkyBlue => pen_color_sky_blue_radio_label.clone(),
             },
             clear_button,
         }
@@ -200,21 +226,22 @@ impl View {
             }
         });
 
-        for (tool, radio) in &self.tool_radios {
-            web::listen_event(radio, "click", {
+        // Uses pointerdown instead of click for more sensitive response.
+        for (tool, label) in &self.tool_radio_labels {
+            web::listen_event(label, "pointerdown", {
                 let ctrl = Rc::clone(&ctrl);
                 move |_: web_sys::MouseEvent| ctrl.borrow_mut().set_tool(tool)
             });
         }
 
-        for (color, radio) in &self.pen_color_radios {
-            web::listen_event(radio, "click", {
+        for (color, label) in &self.pen_color_radio_labels {
+            web::listen_event(label, "pointerdown", {
                 let ctrl = Rc::clone(&ctrl);
                 move |_: web_sys::MouseEvent| ctrl.borrow_mut().set_pen_color(color)
             });
         }
 
-        web::listen_event(&self.clear_button, "click", {
+        web::listen_event(&self.clear_button, "pointerdown", {
             let ctrl = Rc::clone(&ctrl);
             move |_: web_sys::MouseEvent| ctrl.borrow_mut().clear_paths()
         });

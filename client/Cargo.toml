@@ -37,6 +37,7 @@ features = [
   'HtmlCanvasElement',
   'HtmlDivElement',
   'HtmlInputElement',
+  'HtmlLabelElement',
   'KeyboardEvent',
   'MouseEvent',
   'Path2d',
