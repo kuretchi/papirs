@@ -64,7 +64,7 @@ body,
     button
         @include button(40px)
 
-#radio-pen:checked ~ #pen-colors
+#tool-pen-radio:checked ~ #pen-colors
     visibility: visible
     opacity: 1
 
@@ -99,7 +99,7 @@ body,
     --sky-blue: rgb(77, 196, 255)
 
     @each $color in "black", "red", "orange", "green", "blue", "sky-blue"
-        #radio-#{$color} + label
+        #pen-color-#{$color}-radio + label
             background-color: var(--#{$color})
 
 #info

@@ -119,60 +119,60 @@ pub struct View {
 
     tool_radios: EnumMap<Tool, web_sys::HtmlInputElement>,
     pen_color_radios: EnumMap<Color, web_sys::HtmlInputElement>,
-    button_clear: web_sys::HtmlButtonElement,
+    clear_button: web_sys::HtmlButtonElement,
 }
 
 impl View {
     pub fn init() -> Self {
         web::bind_elements! {
             let board;
-            let canvas_main: web_sys::HtmlCanvasElement;
-            let canvas_sub: web_sys::HtmlCanvasElement;
-            let canvas_temp: web_sys::HtmlCanvasElement;
+            let main_canvas: web_sys::HtmlCanvasElement;
+            let sub_canvas: web_sys::HtmlCanvasElement;
+            let temp_canvas: web_sys::HtmlCanvasElement;
 
-            let radio_selector: web_sys::HtmlInputElement;
-            let radio_pen: web_sys::HtmlInputElement;
-            let radio_eraser: web_sys::HtmlInputElement;
+            let tool_selector_radio: web_sys::HtmlInputElement;
+            let tool_pen_radio: web_sys::HtmlInputElement;
+            let tool_eraser_radio: web_sys::HtmlInputElement;
 
-            let radio_black: web_sys::HtmlInputElement;
-            let radio_red: web_sys::HtmlInputElement;
-            let radio_orange: web_sys::HtmlInputElement;
-            let radio_green: web_sys::HtmlInputElement;
-            let radio_blue: web_sys::HtmlInputElement;
-            let radio_sky_blue: web_sys::HtmlInputElement;
+            let pen_color_black_radio: web_sys::HtmlInputElement;
+            let pen_color_red_radio: web_sys::HtmlInputElement;
+            let pen_color_orange_radio: web_sys::HtmlInputElement;
+            let pen_color_green_radio: web_sys::HtmlInputElement;
+            let pen_color_blue_radio: web_sys::HtmlInputElement;
+            let pen_color_sky_blue_radio: web_sys::HtmlInputElement;
 
-            let button_clear;
+            let clear_button;
         }
 
-        let canvas_main = web::Canvas::from(canvas_main);
-        let canvas_sub = web::Canvas::from(canvas_sub);
-        let canvas_temp = web::Canvas::from(canvas_temp);
+        let main_canvas = web::Canvas::from(main_canvas);
+        let sub_canvas = web::Canvas::from(sub_canvas);
+        let temp_canvas = web::Canvas::from(temp_canvas);
 
-        adjust_canvas_size(&board, [&canvas_main, &canvas_sub, &canvas_temp]);
+        adjust_canvas_size(&board, [&main_canvas, &sub_canvas, &temp_canvas]);
 
         Self {
             board,
             layers: enum_map! {
-                Layer::Main => LayerHandle::new(canvas_main.clone()),
-                Layer::Sub => LayerHandle::new(canvas_sub.clone()),
-                Layer::Temp => LayerHandle::new(canvas_temp.clone()),
+                Layer::Main => LayerHandle::new(main_canvas.clone()),
+                Layer::Sub => LayerHandle::new(sub_canvas.clone()),
+                Layer::Temp => LayerHandle::new(temp_canvas.clone()),
             },
             offset: Coordinate::zero(),
 
             tool_radios: enum_map! {
-                Tool::Selector => radio_selector.clone(),
-                Tool::Pen => radio_pen.clone(),
-                Tool::Eraser => radio_eraser.clone(),
+                Tool::Selector => tool_selector_radio.clone(),
+                Tool::Pen => tool_pen_radio.clone(),
+                Tool::Eraser => tool_eraser_radio.clone(),
             },
             pen_color_radios: enum_map! {
-                Color::Black => radio_black.clone(),
-                Color::Red => radio_red.clone(),
-                Color::Orange => radio_orange.clone(),
-                Color::Green => radio_green.clone(),
-                Color::Blue => radio_blue.clone(),
-                Color::SkyBlue => radio_sky_blue.clone(),
+                Color::Black => pen_color_black_radio.clone(),
+                Color::Red => pen_color_red_radio.clone(),
+                Color::Orange => pen_color_orange_radio.clone(),
+                Color::Green => pen_color_green_radio.clone(),
+                Color::Blue => pen_color_blue_radio.clone(),
+                Color::SkyBlue => pen_color_sky_blue_radio.clone(),
             },
-            button_clear,
+            clear_button,
         }
     }
 
@@ -214,7 +214,7 @@ impl View {
             });
         }
 
-        web::listen_event(&self.button_clear, "click", {
+        web::listen_event(&self.clear_button, "click", {
             let ctrl = Rc::clone(&ctrl);
             move |_: web_sys::MouseEvent| ctrl.borrow_mut().clear_paths()
         });
