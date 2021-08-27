@@ -18,7 +18,7 @@ thread_local! {
 
 macro_rules! bind_elements {
     ($(let $id:ident $(: $ty:ty)?;)*) => {$(
-        let id = stringify!($id).replace('_', "-");
+        let id = std::stringify!($id).replace('_', "-");
         let $id $(: $ty)? = wasm_bindgen::JsCast::dyn_into(crate::web::DOCUMENT.with(|d| {
             d.get_element_by_id(&id)
                 .unwrap_or_else(|| std::panic!("no element '{}' found", id))

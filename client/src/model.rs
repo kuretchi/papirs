@@ -1,4 +1,4 @@
-//! A model, which manages the application data and request the view to render objects.
+//! A model, which manages the application data and requests the view to render objects.
 
 mod compat;
 mod history;
@@ -394,7 +394,7 @@ impl Model {
         }
     }
 
-    /// Performs rerendering and save the current state to the storage.
+    /// Performs rerendering and saves the current state to the storage.
     pub fn commit(&mut self) {
         self.rerender();
         self.save();
