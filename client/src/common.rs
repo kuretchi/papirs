@@ -135,6 +135,7 @@ impl Color {
         }
     }
 }
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Enum, Serialize, Deserialize)]
 pub enum Tool {
     Selector,
