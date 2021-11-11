@@ -238,13 +238,10 @@ impl Model {
     /// Select paths which intersect `rect`, contained by `whole_rect`.
     pub fn select_paths_with(&mut self, whole_rect: Rect<i32>, rect: Rect<i32>) {
         let ids = (self.tiling.bounding_tile_items(rect))
-            .filter({
-                let paths = &self.paths;
-                move |&(id, _)| {
-                    let path = paths.get().get(&id).expect("path not found");
-                    let coords = &path.get().get().coords;
-                    whole_rect.contains(&coords.bounding_rect().expect("empty path"))
-                }
+            .filter(|&(id, _)| {
+                let path = self.paths.get().get(&id).expect("path not found");
+                let coords = &path.get().get().coords;
+                whole_rect.contains(&coords.bounding_rect().expect("empty path"))
             })
             .map(|(id, _)| id);
         self.selected_path_ids.update(|s| {
